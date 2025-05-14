@@ -1,4 +1,26 @@
-function random_greedy_color(g::AbstractGraph{T}, reps::Integer) where {T<:Integer}
+function random_greedy_color(g::AbstractGraph{T}, reps::Integer;
+                             parallel=:distributed) where {T<:Integer}
+    return if parallel === :threads
+        threaded_random_greedy_color(g, reps)
+    elseif parallel === :distributed
+        distr_random_greedy_color(g, reps)
+    else
+        error("Unsupported parallel argument '$(repr(parallel))' (supported: ':threads' or ':distributed')")
+    end
+end
+
+function threaded_random_greedy_color(g::AbstractGraph{T}, reps::Integer) where {T<:Integer}
+    local_best = Any[nothing for _ in 1:reps]
+    Base.Threads.@threads for i in 1:reps
+        seq = shuffle(vertices(g))
+        local_best[t] = Graphs.perm_greedy_color(g, seq)
+    end
+    best = reduce(Graphs.best_color, local_best)
+
+    return convert(Graphs.Coloring{T}, best)
+end
+
+function distr_random_greedy_color(g::AbstractGraph{T}, reps::Integer) where {T<:Integer}
     best = @distributed (Graphs.best_color) for i in 1:reps
         seq = shuffle(vertices(g))
         Graphs.perm_greedy_color(g, seq)
